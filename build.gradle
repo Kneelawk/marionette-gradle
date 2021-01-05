@@ -59,7 +59,7 @@ publishing {
             pom {
                 name = 'Marionette Gradle Plugin'
                 description = 'A Gradle plugin for generating and running Marionette Minecraft integration tests'
-                url = 'https://github.com/Kneelawk/Marionette'
+                url = 'https://github.com/Kneelawk/marionette-gradle'
                 packaging = 'jar'
                 licenses {
                     license {
