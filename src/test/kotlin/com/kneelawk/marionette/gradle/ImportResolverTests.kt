@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle
+package com.kneelawk.marionette.gradle
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec

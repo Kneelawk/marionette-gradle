@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle
+package com.kneelawk.marionette.gradle
 
 import com.google.common.base.CaseFormat
 import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceBuilderTData
@@ -15,7 +15,7 @@ import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftServerAccessTData
 import com.kneelawk.marionette.rt.template.FabricModJsonTData
 import com.kneelawk.marionette.rt.template.MarionetteTemplates
 import com.kneelawk.marionette.rt.template.TemplateUtils
-import com.kneelawk.marionettegradle.names.MarionetteNames
+import com.kneelawk.marionette.gradle.names.MarionetteNames
 import org.apache.velocity.VelocityContext
 import org.apache.velocity.app.VelocityEngine
 import org.gradle.api.DefaultTask

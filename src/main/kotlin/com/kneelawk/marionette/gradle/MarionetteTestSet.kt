@@ -1,6 +1,6 @@
-package com.kneelawk.marionettegradle
+package com.kneelawk.marionette.gradle
 
-import com.kneelawk.marionettegradle.names.MarionetteNames
+import com.kneelawk.marionette.gradle.names.MarionetteNames
 import groovy.lang.Closure
 import org.gradle.api.Action
 import org.gradle.api.Named

@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle
+package com.kneelawk.marionette.gradle
 
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer

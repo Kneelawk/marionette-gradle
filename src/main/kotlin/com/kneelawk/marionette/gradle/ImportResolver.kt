@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle
+package com.kneelawk.marionette.gradle
 
 import com.google.common.collect.ImmutableList
 

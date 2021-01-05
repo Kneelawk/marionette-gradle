@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle.names
+package com.kneelawk.marionette.gradle.names
 
 import org.gradle.api.tasks.Input
 

@@ -1,4 +1,4 @@
-package com.kneelawk.marionettegradle.names
+package com.kneelawk.marionette.gradle.names
 
 import groovy.lang.Closure
 import org.gradle.api.Action
