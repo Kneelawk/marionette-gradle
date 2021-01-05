@@ -1,0 +1,83 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.4.21'
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+}
+
+group 'com.kneelawk'
+version '0.1.0-SNAPSHOT'
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+repositories {
+    jcenter()
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+    mavenLocal()
+}
+
+dependencies {
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib'
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+
+    implementation 'fabric-loom:fabric-loom.gradle.plugin:0.5-SNAPSHOT'
+    implementation 'org.apache.velocity:velocity-engine-core:2.2'
+    implementation 'com.google.guava:guava:21.0'
+
+    implementation 'com.kneelawk:marionette-rt:0.1.0-SNAPSHOT'
+
+    testImplementation 'io.kotest:kotest-runner-junit5:4.3.2'
+    testImplementation 'io.kotest:kotest-assertions-core:4.3.2'
+    testImplementation 'io.kotest:kotest-property:4.3.2'
+}
+
+gradlePlugin {
+    plugins {
+        marionetteGradle {
+            id = 'com.kneelawk.marionette-gradle'
+            implementationClass = 'com.kneelawk.marionettegradle.MarionettePlugin'
+        }
+    }
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        marionettePlugin(MavenPublication) {
+            from components.java
+            pom {
+                name = 'Marionette Gradle Plugin'
+                description = 'A Gradle plugin for generating and running Marionette Minecraft integration tests'
+                url = 'https://github.com/Kneelawk/Marionette'
+                packaging = 'jar'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'kneelawk'
+                        name = 'Jed Pommert'
+                        email = 'kneelawk@gmail.com'
+                    }
+                }
+            }
+        }
+    }
+}
+
+compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_1_8.toString()
+compileTestKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_1_8.toString()
