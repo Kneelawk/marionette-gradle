@@ -9,24 +9,39 @@ jobs:
         os: [ ubuntu-20.04, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: checkout repository
+      - name: checkout main repository
         uses: actions/checkout@v2
-      - name: validate gradle wrapper
-        uses: gradle/wrapper-validation-action@v1
+        with:
+          path: main
+      - name: checkout rt repository
+        uses: actions/checkout@v2
+        with:
+          repository: Kneelawk/marionette-rt
+          path: rt
       - name: setup jdk ${{ matrix.java }}
         uses: actions/setup-java@v1
         with:
           java-version: ${{ matrix.java }}
       - name: make gradle wrapper executable
         if: ${{ runner.os != 'Windows' }}
-        run: chmod +x ./gradlew
+        run: |
+          chmod +x ./main/gradlew
+          chmod +x ./rt/gradlew
+      - name: marionette-rt publish to maven local
+        run: ./gradlew publishToMavenLocal
+        working-directory: rt
       - name: build
         run: ./gradlew build
-      - name: test
-        run: ./gradlew test
+        working-directory: main
       - name: capture build artifacts
         if: ${{ runner.os == 'Linux' && matrix.java == '11' }}
         uses: actions/upload-artifact@v2
         with:
           name: Artifacts
-          path: build/libs/
+          path: main/build/libs/
+      - name: capture test artifacts
+        if: ${{ runner.os == 'Linux' && matrix.java == '11' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: Tests
+          path: main/build/reports/
