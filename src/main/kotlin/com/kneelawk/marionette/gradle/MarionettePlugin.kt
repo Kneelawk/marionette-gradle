@@ -75,9 +75,9 @@ class MarionettePlugin : Plugin<Project> {
             testResourcesOutput = srcDirs.testRes
             testSetName = testSet.name
             names = testSet.names
-            testSet.commonSignals.signals.all { commonSignals.signals.add(it) }
-            testSet.clientSignals.signals.all { clientSignals.signals.add(it) }
-            testSet.serverSignals.signals.all { serverSignals.signals.add(it) }
+            commonSignals = testSet.commonSignals
+            clientSignals = testSet.clientSignals
+            serverSignals = testSet.serverSignals
         }
     }
 

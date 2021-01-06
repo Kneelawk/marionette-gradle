@@ -59,13 +59,13 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     var names = MarionetteNames()
 
     @get:Nested
-    val commonSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
+    var commonSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
     @get:Nested
-    val clientSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
+    var clientSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
     @get:Nested
-    val serverSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
+    var serverSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
     @TaskAction
     fun run() {
