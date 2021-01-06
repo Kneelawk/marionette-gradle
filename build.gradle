@@ -27,7 +27,7 @@ dependencies {
     implementation 'org.apache.velocity:velocity-engine-core:2.2'
     implementation 'com.google.guava:guava:21.0'
 
-    implementation 'com.kneelawk:marionette-rt:0.1.0-SNAPSHOT'
+    implementation 'com.kneelawk.marionette:marionette-rt:0.1.0-SNAPSHOT'
 
     testImplementation 'io.kotest:kotest-runner-junit5:4.3.2'
     testImplementation 'io.kotest:kotest-assertions-core:4.3.2'
@@ -38,7 +38,7 @@ gradlePlugin {
     plugins {
         marionetteGradle {
             id = 'com.kneelawk.marionette-gradle'
-            implementationClass = 'com.kneelawk.marionettegradle.MarionettePlugin'
+            implementationClass = 'com.kneelawk.marionette.gradle.MarionettePlugin'
         }
     }
 }
