@@ -1,0 +1,14 @@
+name: gradle-wrapper-validation
+
+on:
+  - pull_request
+  - push
+
+jobs:
+  gradle-wrapper-validation:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: checkout project
+        uses: actions/checkout@v2
+      - name: gradle wrapper validation
+        uses: gradle/wrapper-validation-action@v1
