@@ -14,13 +14,16 @@ open class MarionetteNames {
     @get:Nested
     var proxy = MarionetteProxyNames()
 
+    @get:Nested
+    var utils = MarionetteUtilNames()
+
     fun instance(action: Action<MarionetteInstanceNames>) {
         action.execute(instance)
     }
 
     fun instance(closure: Closure<Unit>) {
         closure.delegate = instance
-        closure.call()
+        closure.call(instance)
     }
 
     fun entryPoint(action: Action<MarionetteEntryPointNames>) {
@@ -29,7 +32,7 @@ open class MarionetteNames {
 
     fun entryPoint(closure: Closure<Unit>) {
         closure.delegate = entryPoint
-        closure.call()
+        closure.call(entryPoint)
     }
 
     fun proxy(action: Action<MarionetteProxyNames>) {
@@ -38,6 +41,15 @@ open class MarionetteNames {
 
     fun proxy(closure: Closure<Unit>) {
         closure.delegate = proxy
-        closure.call()
+        closure.call(proxy)
+    }
+
+    fun utils(action: Action<MarionetteUtilNames>) {
+        action.execute(utils)
+    }
+
+    fun utils(closure: Closure<Unit>) {
+        closure.delegate = utils
+        closure.call(utils)
     }
 }

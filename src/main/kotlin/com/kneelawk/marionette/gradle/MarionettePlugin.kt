@@ -75,6 +75,9 @@ class MarionettePlugin : Plugin<Project> {
             testResourcesOutput = srcDirs.testRes
             testSetName = testSet.name
             names = testSet.names
+            commonSignals = testSet.commonSignals
+            clientSignals = testSet.clientSignals
+            serverSignals = testSet.serverSignals
         }
     }
 
@@ -128,12 +131,30 @@ class MarionettePlugin : Plugin<Project> {
             add(testSourceSet.implementationConfigurationName, apiSourceSet.output)
 
             // configure external dependencies
-            add(genApiSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
-            add(genModSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
-            add(genTestSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
-            add(apiSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
-            add(modSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
-            add(testSourceSet.implementationConfigurationName, "com.kneelawk:marionette-rt:${marionetteRtVersion}")
+            add(
+                genApiSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
+            add(
+                genModSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
+            add(
+                genTestSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
+            add(
+                apiSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
+            add(
+                modSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
+            add(
+                testSourceSet.implementationConfigurationName,
+                "com.kneelawk.marionette:marionette-rt:${marionetteRtVersion}"
+            )
         }
 
         return SourceSetSet(modSourceSet, testSourceSet)

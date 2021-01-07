@@ -38,7 +38,7 @@ gradlePlugin {
     plugins {
         marionetteGradle {
             id = 'com.kneelawk.marionette-gradle'
-            implementationClass = 'com.kneelawk.marionettegradle.MarionettePlugin'
+            implementationClass = 'com.kneelawk.marionette.gradle.MarionettePlugin'
         }
     }
 }

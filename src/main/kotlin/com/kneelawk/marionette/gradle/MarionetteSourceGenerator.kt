@@ -1,24 +1,28 @@
 package com.kneelawk.marionette.gradle
 
 import com.google.common.base.CaseFormat
+import com.kneelawk.marionette.gradle.names.MarionetteNames
+import com.kneelawk.marionette.gradle.signal.MarionetteSignals
 import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceBuilderTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftServerInstanceBuilderTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftServerInstanceTData
+import com.kneelawk.marionette.rt.mod.client.template.ClientGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.client.template.MarionetteClientPreLaunchTData
 import com.kneelawk.marionette.rt.mod.client.template.MinecraftClientAccessTData
 import com.kneelawk.marionette.rt.mod.server.template.MarionetteServerPreLaunchTData
 import com.kneelawk.marionette.rt.mod.server.template.MinecraftServerAccessTData
+import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.template.MarionetteModPreLaunchTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftClientAccessTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftServerAccessTData
 import com.kneelawk.marionette.rt.template.FabricModJsonTData
 import com.kneelawk.marionette.rt.template.MarionetteTemplates
 import com.kneelawk.marionette.rt.template.TemplateUtils
-import com.kneelawk.marionette.gradle.names.MarionetteNames
 import org.apache.velocity.VelocityContext
 import org.apache.velocity.app.VelocityEngine
 import org.gradle.api.DefaultTask
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputDirectory
@@ -27,8 +31,9 @@ import java.io.File
 import java.io.FileWriter
 import java.io.InputStream
 import java.io.InputStreamReader
+import javax.inject.Inject
 
-open class MarionetteSourceGenerator : DefaultTask() {
+open class MarionetteSourceGenerator @Inject constructor(private val objectFactory: ObjectFactory) : DefaultTask() {
     @get:OutputDirectory
     var apiJavaOutput = File("apiJava")
 
@@ -52,6 +57,15 @@ open class MarionetteSourceGenerator : DefaultTask() {
 
     @get:Nested
     var names = MarionetteNames()
+
+    @get:Nested
+    var commonSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
+
+    @get:Nested
+    var clientSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
+
+    @get:Nested
+    var serverSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
     @TaskAction
     fun run() {
@@ -83,6 +97,9 @@ open class MarionetteSourceGenerator : DefaultTask() {
         generateServerPreLaunch(engine)
         generateClientAccess(engine)
         generateServerAccess(engine)
+
+        generateClientGlobalSignals(engine)
+        generateServerGlobalSignals(engine)
     }
 
     private fun generate(engine: VelocityEngine, output: File, input: InputStream, data: Any) {
@@ -114,6 +131,8 @@ open class MarionetteSourceGenerator : DefaultTask() {
                 .packageName(packageName)
                 .className(className)
                 .importNames(imports.getImports(packageName))
+                .signalNames(commonSignals.signals.names)
+                .signalNames(clientSignals.signals.names)
                 .build()
         )
     }
@@ -132,6 +151,8 @@ open class MarionetteSourceGenerator : DefaultTask() {
                 .packageName(packageName)
                 .className(className)
                 .importNames(imports.getImports(packageName))
+                .signalNames(commonSignals.signals.names)
+                .signalNames(serverSignals.signals.names)
                 .build()
         )
     }
@@ -152,6 +173,8 @@ open class MarionetteSourceGenerator : DefaultTask() {
                 .className(className)
                 .importNames(imports.getImports(packageName))
                 .rmiClass(imports[rmiClass])
+                .signalNames(commonSignals.signals.names)
+                .signalNames(clientSignals.signals.names)
                 .build()
         )
     }
@@ -172,6 +195,8 @@ open class MarionetteSourceGenerator : DefaultTask() {
                 .className(className)
                 .importNames(imports.getImports(packageName))
                 .rmiClass(imports[rmiClass])
+                .signalNames(commonSignals.signals.names)
+                .signalNames(serverSignals.signals.names)
                 .build()
         )
     }
@@ -275,7 +300,7 @@ open class MarionetteSourceGenerator : DefaultTask() {
         generate(
             engine,
             fromPackage(modJavaOutput, packageName, className),
-            MarionetteTemplates.getClientPreLaunchTemplate(),
+            MarionetteTemplates.getServerPreLaunchTemplate(),
             MarionetteServerPreLaunchTData.builder()
                 .packageName(packageName)
                 .className(className)
@@ -289,6 +314,7 @@ open class MarionetteSourceGenerator : DefaultTask() {
     private fun generateClientAccess(engine: VelocityEngine) {
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiClientAccessPackage, names.proxy.apiClientAccessName)
+        val signalClass = imports.add(names.utils.clientGlobalSignalsPackage, names.utils.clientGlobalSignalsName)
 
         val packageName = names.proxy.modClientAccessPackage
         val className = names.proxy.modClientAccessName
@@ -302,6 +328,9 @@ open class MarionetteSourceGenerator : DefaultTask() {
                 .className(className)
                 .importNames(imports.getImports(packageName))
                 .rmiClass(imports[rmiClass])
+                .signalClass(imports[signalClass])
+                .signalNames(commonSignals.signals.names)
+                .signalNames(clientSignals.signals.names)
                 .build()
         )
     }
@@ -309,6 +338,7 @@ open class MarionetteSourceGenerator : DefaultTask() {
     private fun generateServerAccess(engine: VelocityEngine) {
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiServerAccessPackage, names.proxy.apiServerAccessName)
+        val signalClass = imports.add(names.utils.serverGlobalSignalsPackage, names.utils.serverGlobalSignalsName)
 
         val packageName = names.proxy.modServerAccessPackage
         val className = names.proxy.modServerAccessName
@@ -316,12 +346,49 @@ open class MarionetteSourceGenerator : DefaultTask() {
         generate(
             engine,
             fromPackage(modJavaOutput, packageName, className),
-            MarionetteTemplates.getClientAccessTemplate(),
+            MarionetteTemplates.getServerAccessTemplate(),
             MinecraftServerAccessTData.builder()
                 .packageName(packageName)
                 .className(className)
                 .importNames(imports.getImports(packageName))
                 .rmiClass(imports[rmiClass])
+                .signalClass(imports[signalClass])
+                .signalNames(commonSignals.signals.names)
+                .signalNames(serverSignals.signals.names)
+                .build()
+        )
+    }
+
+    private fun generateClientGlobalSignals(engine: VelocityEngine) {
+        val packageName = names.utils.clientGlobalSignalsPackage
+        val className = names.utils.clientGlobalSignalsName
+
+        generate(
+            engine,
+            fromPackage(modJavaOutput, packageName, className),
+            MarionetteTemplates.getClientGlobalSignalsTemplate(),
+            ClientGlobalSignalsTData.builder()
+                .packageName(packageName)
+                .className(className)
+                .signals(commonSignals.signals.map { it.toTData() })
+                .signals(clientSignals.signals.map { it.toTData() })
+                .build()
+        )
+    }
+
+    private fun generateServerGlobalSignals(engine: VelocityEngine) {
+        val packageName = names.utils.serverGlobalSignalsPackage
+        val className = names.utils.serverGlobalSignalsName
+
+        generate(
+            engine,
+            fromPackage(modJavaOutput, packageName, className),
+            MarionetteTemplates.getServerGlobalSignalsTemplate(),
+            ServerGlobalSignalsTData.builder()
+                .packageName(packageName)
+                .className(className)
+                .signals(commonSignals.signals.map { it.toTData() })
+                .signals(serverSignals.signals.map { it.toTData() })
                 .build()
         )
     }
