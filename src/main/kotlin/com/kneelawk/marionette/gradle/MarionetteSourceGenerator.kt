@@ -482,7 +482,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         val imports = ImportResolver()
         val returnType = if (!rmi) imports.add(TypeName.fromString(callback.returnType)) else null
         val argumentTypes = callback.arguments.map { imports.add(TypeName.fromString(it)) }
-        val exceptionTypes = callback.exceptions.map { imports.add(TypeName.fromString(it)) }
+        val exceptionTypes = if (!rmi) callback.exceptions.map { imports.add(TypeName.fromString(it)) } else null
         val remoteException = if (rmi) imports.add(remoteExceptionType) else null
 
         val packageName1 = callback.packageName ?: packageName
@@ -495,11 +495,10 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
             .importNames(imports.getImports(packageName1))
             .remote(rmi)
             .parameterTypes(argumentTypes.map { imports[it] })
-            .exceptionTypes(exceptionTypes.map { imports[it] })
-
-        if (remoteException != null && !exceptionTypes.contains(remoteException)) tData.exceptionType(imports[remoteException])
 
         tData.returnType(returnType?.let { imports[it] } ?: "void")
+        exceptionTypes?.let { et -> tData.exceptionTypes(et.map { imports[it] }) }
+        remoteException?.let { tData.exceptionType(imports[it]) }
 
         generate(
             engine,
