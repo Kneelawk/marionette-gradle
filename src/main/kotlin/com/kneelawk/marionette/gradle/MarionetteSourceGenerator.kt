@@ -1,8 +1,10 @@
 package com.kneelawk.marionette.gradle
 
 import com.google.common.base.CaseFormat
+import com.kneelawk.marionette.gradle.callback.QueueCallback
 import com.kneelawk.marionette.gradle.names.MarionetteNames
 import com.kneelawk.marionette.gradle.signal.MarionetteSignals
+import com.kneelawk.marionette.rt.callback.template.CallbackTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceBuilderTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceTData
 import com.kneelawk.marionette.rt.instance.template.MinecraftServerInstanceBuilderTData
@@ -22,6 +24,7 @@ import com.kneelawk.marionette.rt.template.TemplateUtils
 import org.apache.velocity.VelocityContext
 import org.apache.velocity.app.VelocityEngine
 import org.gradle.api.DefaultTask
+import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested
@@ -67,6 +70,18 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     @get:Nested
     var serverSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
+    @get:Nested
+    var commonQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
+    @get:Nested
+    var clientQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
+    @get:Nested
+    var serverQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
     @TaskAction
     fun run() {
         val engine = VelocityEngine()
@@ -100,6 +115,55 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
 
         generateClientGlobalSignals(engine)
         generateServerGlobalSignals(engine)
+
+        generateQueueCallbacks(
+            engine,
+            commonQueues,
+            names.proxy.apiCommonQueueCallbackPackage,
+            names.proxy.apiCommonQueueCallbackPrefix,
+            names.proxy.apiCommonQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            clientQueues,
+            names.proxy.apiClientQueueCallbackPackage,
+            names.proxy.apiClientQueueCallbackPrefix,
+            names.proxy.apiClientQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            serverQueues,
+            names.proxy.apiServerQueueCallbackPackage,
+            names.proxy.apiServerQueueCallbackPrefix,
+            names.proxy.apiServerQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            commonQueues,
+            names.proxy.testCommonQueueCallbackPackage,
+            names.proxy.testCommonQueueCallbackPrefix,
+            names.proxy.testCommonQueueCallbackSuffix,
+            false
+        )
+        generateQueueCallbacks(
+            engine,
+            clientQueues,
+            names.proxy.testClientQueueCallbackPackage,
+            names.proxy.testClientQueueCallbackPrefix,
+            names.proxy.testClientQueueCallbackSuffix,
+            false
+        )
+        generateQueueCallbacks(
+            engine,
+            serverQueues,
+            names.proxy.testServerQueueCallbackPackage,
+            names.proxy.testServerQueueCallbackPrefix,
+            names.proxy.testServerQueueCallbackSuffix,
+            false
+        )
     }
 
     private fun generate(engine: VelocityEngine, output: File, input: InputStream, data: Any) {
@@ -390,6 +454,58 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signals(commonSignals.signals.map { it.toTData() })
                 .signals(serverSignals.signals.map { it.toTData() })
                 .build()
+        )
+    }
+
+    private fun generateQueueCallbacks(
+        engine: VelocityEngine,
+        callbacks: NamedDomainObjectContainer<QueueCallback>,
+        packageName: String,
+        prefix: String,
+        suffix: String,
+        rmi: Boolean
+    ) {
+        for (callback in callbacks) {
+            generateQueueCallback(engine, callback, packageName, prefix, suffix, rmi)
+        }
+    }
+
+    private fun generateQueueCallback(
+        engine: VelocityEngine,
+        callback: QueueCallback,
+        packageName: String,
+        prefix: String,
+        suffix: String,
+        rmi: Boolean
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
+        val imports = ImportResolver()
+        val returnType = if (!rmi) imports.add(TypeName.fromString(callback.returnType)) else null
+        val argumentTypes = callback.arguments.map { imports.add(TypeName.fromString(it)) }
+        val exceptionTypes = callback.exceptions.map { imports.add(TypeName.fromString(it)) }
+        val remoteException = if (rmi) imports.add(remoteExceptionType) else null
+
+        val packageName1 = callback.packageName ?: packageName
+        val className =
+            callback.className ?: prefix + CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, callback.name) + suffix
+
+        val tData = CallbackTData.builder()
+            .packageName(packageName1)
+            .className(className)
+            .importNames(imports.getImports(packageName1))
+            .remote(rmi)
+            .parameterTypes(argumentTypes.map { imports[it] })
+            .exceptionTypes(exceptionTypes.map { imports[it] })
+
+        if (remoteException != null && !exceptionTypes.contains(remoteException)) tData.exceptionType(imports[remoteException])
+
+        tData.returnType(returnType?.let { imports[it] } ?: "void")
+
+        generate(
+            engine,
+            fromPackage(if (rmi) apiJavaOutput else testJavaOutput, packageName1, className),
+            MarionetteTemplates.getCallbackTemplate(),
+            tData.build()
         )
     }
 

@@ -3,62 +3,82 @@ package com.kneelawk.marionette.gradle
 import com.google.common.collect.ImmutableList
 
 class ImportResolver {
+    private val existingTypes = mutableMapOf<TypeName, Any>()
     private val existingNames = mutableMapOf<String, Int>()
-    private val unqualifiedNames = mutableMapOf<Any, String>()
-    private val packages = mutableMapOf<Any, String>()
-    private val qualifiedNames = mutableMapOf<Any, String>()
-
-    private fun toQualified(pack: String, name: String): String {
-        return "${pack}.${name}"
-    }
+    private val types = mutableMapOf<Any, TypeName>()
 
     fun add(pack: String, name: String): Any {
-        existingNames.compute(name) { _, value -> value?.let { it + 1 } ?: 1 }
-        val key = Any()
-        unqualifiedNames[key] = name
-        packages[key] = pack
-        qualifiedNames[key] = toQualified(pack, name)
-        return key
+        val type = TypeName(pack, name)
+        return if (existingTypes.containsKey(type)) {
+            existingTypes[type]!!
+        } else {
+            existingNames.compute(name) { _, value -> value?.let { it + 1 } ?: 1 }
+
+            val key = Any()
+            existingTypes[type] = key
+            types[key] = type
+
+            key
+        }
+    }
+
+    fun add(type: TypeName): Any {
+        return if (existingTypes.containsKey(type)) {
+            existingTypes[type]!!
+        } else {
+            existingNames.compute(type.className) { _, value -> value?.let { it + 1 } ?: 1 }
+
+            val key = Any()
+            existingTypes[type] = key
+            types[key] = type
+
+            key
+        }
     }
 
     operator fun get(key: Any): String {
-        if (!unqualifiedNames.containsKey(key)) {
+        if (!types.containsKey(key)) {
             throw IllegalArgumentException("Key not found")
         }
 
-        return if (existingNames[unqualifiedNames[key]]!! < 2) {
-            unqualifiedNames[key]!!
+        return if (existingNames[types[key]!!.className]!! < 2) {
+            types[key]!!.className
         } else {
-            qualifiedNames[key]!!
+            types[key]!!.qualified
         }
     }
 
     fun getImport(key: Any): String? {
-        if (!unqualifiedNames.containsKey(key)) {
+        if (!types.containsKey(key)) {
             throw IllegalArgumentException("Key not found")
         }
 
-        return if (existingNames[unqualifiedNames[key]]!! < 2) {
-            packages[key]
+        val type = types[key]!!
+        return if (existingNames[type.className]!! < 2) {
+            type.qualified
         } else {
             null
         }
     }
 
     fun getImport(key: Any, curPack: String): String? {
-        val import = getImport(key)
-        return if (curPack == import) {
-            null
+        if (!types.containsKey(key)) {
+            throw IllegalArgumentException("Key not found")
+        }
+
+        val type = types[key]!!
+        return if (curPack != type.packageName && existingNames[type.className]!! < 2) {
+            type.qualified
         } else {
-            import
+            null
         }
     }
 
     fun getImports(): List<String> {
         val builder = ImmutableList.builder<String>()
-        for (key in unqualifiedNames.keys) {
-            if (existingNames[unqualifiedNames[key]]!! < 2) {
-                builder.add(qualifiedNames[key]!!)
+        for (type in existingTypes.keys) {
+            if (existingNames[type.className]!! < 2 && type.wrapper == null) {
+                builder.add(type.qualified)
             }
         }
         return builder.build()
@@ -66,9 +86,9 @@ class ImportResolver {
 
     fun getImports(curPack: String): List<String> {
         val builder = ImmutableList.builder<String>()
-        for (key in unqualifiedNames.keys) {
-            if (existingNames[unqualifiedNames[key]]!! < 2 && curPack != packages[key]) {
-                builder.add(qualifiedNames[key]!!)
+        for (type in existingTypes.keys) {
+            if (existingNames[type.className]!! < 2 && curPack != type.packageName && type.wrapper == null) {
+                builder.add(type.qualified)
             }
         }
         return builder.build()
