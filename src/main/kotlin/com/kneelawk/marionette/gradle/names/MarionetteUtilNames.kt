@@ -14,4 +14,16 @@ open class MarionetteUtilNames {
 
     @get:Input
     var serverGlobalSignalsPackage = "com.kneelawk.marionette.gen.mod.server"
+
+    @get:Input
+    var clientGlobalQueuesName = "ClientGlobalQueues"
+
+    @get:Input
+    var clientGlobalQueuesPackage = "com.kneelawk.marionette.gen.mod.client"
+
+    @get:Input
+    var serverGlobalQueuesName = "ServerGlobalQueues"
+
+    @get:Input
+    var serverGlobalQueuesPackage = "com.kneelawk.marionette.gen.mod.server"
 }
