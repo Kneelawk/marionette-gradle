@@ -78,6 +78,9 @@ class MarionettePlugin : Plugin<Project> {
             commonSignals = testSet.commonSignals
             clientSignals = testSet.clientSignals
             serverSignals = testSet.serverSignals
+            commonQueues = testSet.commonQueues
+            clientQueues = testSet.clientQueues
+            serverQueues = testSet.serverQueues
         }
     }
 

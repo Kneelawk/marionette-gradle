@@ -1,19 +1,22 @@
 package com.kneelawk.marionette.gradle
 
 import com.google.common.base.CaseFormat
+import com.kneelawk.marionette.gradle.callback.QueueCallback
 import com.kneelawk.marionette.gradle.names.MarionetteNames
 import com.kneelawk.marionette.gradle.signal.MarionetteSignals
-import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceBuilderTData
-import com.kneelawk.marionette.rt.instance.template.MinecraftClientInstanceTData
-import com.kneelawk.marionette.rt.instance.template.MinecraftServerInstanceBuilderTData
-import com.kneelawk.marionette.rt.instance.template.MinecraftServerInstanceTData
+import com.kneelawk.marionette.rt.callback.template.CallbackTData
+import com.kneelawk.marionette.rt.instance.template.*
+import com.kneelawk.marionette.rt.mod.MinecraftAccessQueueCallbackInfo
+import com.kneelawk.marionette.rt.mod.client.template.ClientGlobalQueuesTData
 import com.kneelawk.marionette.rt.mod.client.template.ClientGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.client.template.MarionetteClientPreLaunchTData
 import com.kneelawk.marionette.rt.mod.client.template.MinecraftClientAccessTData
 import com.kneelawk.marionette.rt.mod.server.template.MarionetteServerPreLaunchTData
 import com.kneelawk.marionette.rt.mod.server.template.MinecraftServerAccessTData
+import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalQueuesTData
 import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.template.MarionetteModPreLaunchTData
+import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftAccessQueueCallbackInfo
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftClientAccessTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftServerAccessTData
 import com.kneelawk.marionette.rt.template.FabricModJsonTData
@@ -22,6 +25,7 @@ import com.kneelawk.marionette.rt.template.TemplateUtils
 import org.apache.velocity.VelocityContext
 import org.apache.velocity.app.VelocityEngine
 import org.gradle.api.DefaultTask
+import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested
@@ -67,6 +71,18 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     @get:Nested
     var serverSignals: MarionetteSignals = objectFactory.newInstance(MarionetteSignals::class.java)
 
+    @get:Nested
+    var commonQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
+    @get:Nested
+    var clientQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
+    @get:Nested
+    var serverQueues: NamedDomainObjectContainer<QueueCallback> =
+        objectFactory.domainObjectContainer(QueueCallback::class.java)
+
     @TaskAction
     fun run() {
         val engine = VelocityEngine()
@@ -100,6 +116,58 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
 
         generateClientGlobalSignals(engine)
         generateServerGlobalSignals(engine)
+
+        generateClientGlobalQueues(engine)
+        generateServerGlobalQueues(engine)
+
+        generateQueueCallbacks(
+            engine,
+            commonQueues,
+            names.proxy.apiCommonQueueCallbackPackage,
+            names.proxy.apiCommonQueueCallbackPrefix,
+            names.proxy.apiCommonQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            clientQueues,
+            names.proxy.apiClientQueueCallbackPackage,
+            names.proxy.apiClientQueueCallbackPrefix,
+            names.proxy.apiClientQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            serverQueues,
+            names.proxy.apiServerQueueCallbackPackage,
+            names.proxy.apiServerQueueCallbackPrefix,
+            names.proxy.apiServerQueueCallbackSuffix,
+            true
+        )
+        generateQueueCallbacks(
+            engine,
+            commonQueues,
+            names.proxy.testCommonQueueCallbackPackage,
+            names.proxy.testCommonQueueCallbackPrefix,
+            names.proxy.testCommonQueueCallbackSuffix,
+            false
+        )
+        generateQueueCallbacks(
+            engine,
+            clientQueues,
+            names.proxy.testClientQueueCallbackPackage,
+            names.proxy.testClientQueueCallbackPrefix,
+            names.proxy.testClientQueueCallbackSuffix,
+            false
+        )
+        generateQueueCallbacks(
+            engine,
+            serverQueues,
+            names.proxy.testServerQueueCallbackPackage,
+            names.proxy.testServerQueueCallbackPrefix,
+            names.proxy.testServerQueueCallbackSuffix,
+            false
+        )
     }
 
     private fun generate(engine: VelocityEngine, output: File, input: InputStream, data: Any) {
@@ -119,6 +187,41 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
 
     private fun generateRMIClientAccess(engine: VelocityEngine) {
         val imports = ImportResolver()
+        val queueCallbacks = mutableListOf<() -> RMIMinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                RMIMinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(clientQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiClientQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiClientQueueCallbackPrefix,
+                    names.proxy.apiClientQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                RMIMinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
 
         val packageName = names.proxy.apiClientAccessPackage
         val className = names.proxy.apiClientAccessName
@@ -133,12 +236,48 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .importNames(imports.getImports(packageName))
                 .signalNames(commonSignals.signals.names)
                 .signalNames(clientSignals.signals.names)
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
 
     private fun generateRMIServerAccess(engine: VelocityEngine) {
         val imports = ImportResolver()
+        val queueCallbacks = mutableListOf<() -> RMIMinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                RMIMinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(serverQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiServerQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiServerQueueCallbackPrefix,
+                    names.proxy.apiServerQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                RMIMinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
 
         val packageName = names.proxy.apiServerAccessPackage
         val className = names.proxy.apiServerAccessName
@@ -153,6 +292,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .importNames(imports.getImports(packageName))
                 .signalNames(commonSignals.signals.names)
                 .signalNames(serverSignals.signals.names)
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
@@ -160,6 +300,49 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     private fun generateClientInstance(engine: VelocityEngine) {
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiClientAccessPackage, names.proxy.apiClientAccessName)
+        val queueCallbacks = mutableListOf<() -> InstanceQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.testCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.testCommonQueueCallbackPrefix,
+                    names.proxy.testCommonQueueCallbackSuffix
+                )
+            )
+            val returnTypeName = TypeName.fromString(cb.returnType)
+            val returnType = imports.add(returnTypeName.wrapper ?: returnTypeName)
+
+            return@map {
+                InstanceQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .callbackReturnType(imports[returnType])
+                    .parameterCount(cb.arguments.size)
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(clientQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.testClientQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.testClientQueueCallbackPrefix,
+                    names.proxy.testClientQueueCallbackSuffix
+                )
+            )
+            val returnTypeName = TypeName.fromString(cb.returnType)
+            val returnType = imports.add(returnTypeName.wrapper ?: returnTypeName)
+
+            return@map {
+                InstanceQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .callbackReturnType(imports[returnType])
+                    .parameterCount(cb.arguments.size)
+                    .build()
+            }
+        })
 
         val packageName = names.instance.clientInstancePackage
         val className = names.instance.clientInstanceName
@@ -175,6 +358,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .rmiClass(imports[rmiClass])
                 .signalNames(commonSignals.signals.names)
                 .signalNames(clientSignals.signals.names)
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
@@ -182,6 +366,49 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     private fun generateServerInstance(engine: VelocityEngine) {
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiServerAccessPackage, names.proxy.apiServerAccessName)
+        val queueCallbacks = mutableListOf<() -> InstanceQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.testCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.testCommonQueueCallbackPrefix,
+                    names.proxy.testCommonQueueCallbackSuffix
+                )
+            )
+            val returnTypeName = TypeName.fromString(cb.returnType)
+            val returnType = imports.add(returnTypeName.wrapper ?: returnTypeName)
+
+            return@map {
+                InstanceQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .callbackReturnType(imports[returnType])
+                    .parameterCount(cb.arguments.size)
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(serverQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.testServerQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.testServerQueueCallbackPrefix,
+                    names.proxy.testServerQueueCallbackSuffix
+                )
+            )
+            val returnTypeName = TypeName.fromString(cb.returnType)
+            val returnType = imports.add(returnTypeName.wrapper ?: returnTypeName)
+
+            return@map {
+                InstanceQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .callbackReturnType(imports[returnType])
+                    .parameterCount(cb.arguments.size)
+                    .build()
+            }
+        })
 
         val packageName = names.instance.serverInstancePackage
         val className = names.instance.serverInstanceName
@@ -197,6 +424,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .rmiClass(imports[rmiClass])
                 .signalNames(commonSignals.signals.names)
                 .signalNames(serverSignals.signals.names)
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
@@ -315,6 +543,42 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiClientAccessPackage, names.proxy.apiClientAccessName)
         val signalClass = imports.add(names.utils.clientGlobalSignalsPackage, names.utils.clientGlobalSignalsName)
+        val queueClass = imports.add(names.utils.clientGlobalQueuesPackage, names.utils.clientGlobalQueuesName)
+        val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(clientQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiClientQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiClientQueueCallbackPrefix,
+                    names.proxy.apiClientQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
 
         val packageName = names.proxy.modClientAccessPackage
         val className = names.proxy.modClientAccessName
@@ -331,6 +595,8 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalClass(imports[signalClass])
                 .signalNames(commonSignals.signals.names)
                 .signalNames(clientSignals.signals.names)
+                .queueClass(imports[queueClass])
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
@@ -339,6 +605,42 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         val imports = ImportResolver()
         val rmiClass = imports.add(names.proxy.apiServerAccessPackage, names.proxy.apiServerAccessName)
         val signalClass = imports.add(names.utils.serverGlobalSignalsPackage, names.utils.serverGlobalSignalsName)
+        val queueClass = imports.add(names.utils.serverGlobalQueuesPackage, names.utils.serverGlobalQueuesName)
+        val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(serverQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiServerQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiServerQueueCallbackPrefix,
+                    names.proxy.apiServerQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
 
         val packageName = names.proxy.modServerAccessPackage
         val className = names.proxy.modServerAccessName
@@ -355,6 +657,8 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalClass(imports[signalClass])
                 .signalNames(commonSignals.signals.names)
                 .signalNames(serverSignals.signals.names)
+                .queueClass(imports[queueClass])
+                .queueCallbacks(queueCallbacks.map { it() })
                 .build()
         )
     }
@@ -391,6 +695,168 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signals(serverSignals.signals.map { it.toTData() })
                 .build()
         )
+    }
+
+    private fun generateClientGlobalQueues(engine: VelocityEngine) {
+        val imports = ImportResolver()
+        val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(clientQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiClientQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiClientQueueCallbackPrefix,
+                    names.proxy.apiClientQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+
+        val packageName = names.utils.clientGlobalQueuesPackage
+        val className = names.utils.clientGlobalQueuesName
+
+        generate(
+            engine,
+            fromPackage(modJavaOutput, packageName, className),
+            MarionetteTemplates.getClientGlobalQueuesTemplate(),
+            ClientGlobalQueuesTData.builder()
+                .packageName(packageName)
+                .className(className)
+                .importNames(imports.getImports(packageName))
+                .queueCallbacks(queueCallbacks.map { it() })
+                .build()
+        )
+    }
+
+    private fun generateServerGlobalQueues(engine: VelocityEngine) {
+        val imports = ImportResolver()
+        val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        queueCallbacks.addAll(commonQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiCommonQueueCallbackPrefix,
+                    names.proxy.apiCommonQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+        queueCallbacks.addAll(serverQueues.map { cb ->
+            val clazz = imports.add(
+                cb.packageName ?: names.proxy.apiServerQueueCallbackPackage,
+                getQueueCallbackClassName(
+                    cb,
+                    names.proxy.apiServerQueueCallbackPrefix,
+                    names.proxy.apiServerQueueCallbackSuffix
+                )
+            )
+
+            return@map {
+                MinecraftAccessQueueCallbackInfo.builder()
+                    .callbackName(cb.name)
+                    .callbackClass(imports[clazz])
+                    .build()
+            }
+        })
+
+        val packageName = names.utils.serverGlobalQueuesPackage
+        val className = names.utils.serverGlobalQueuesName
+
+        generate(
+            engine,
+            fromPackage(modJavaOutput, packageName, className),
+            MarionetteTemplates.getServerGlobalQueuesTemplate(),
+            ServerGlobalQueuesTData.builder()
+                .packageName(packageName)
+                .className(className)
+                .importNames(imports.getImports(packageName))
+                .queueCallbacks(queueCallbacks.map { it() })
+                .build()
+        )
+    }
+
+    private fun generateQueueCallbacks(
+        engine: VelocityEngine,
+        callbacks: NamedDomainObjectContainer<QueueCallback>,
+        packageName: String,
+        prefix: String,
+        suffix: String,
+        rmi: Boolean
+    ) {
+        for (callback in callbacks) {
+            generateQueueCallback(engine, callback, packageName, prefix, suffix, rmi)
+        }
+    }
+
+    private fun generateQueueCallback(
+        engine: VelocityEngine,
+        callback: QueueCallback,
+        packageName: String,
+        prefix: String,
+        suffix: String,
+        rmi: Boolean
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
+        val imports = ImportResolver()
+        val returnType = if (!rmi) imports.add(TypeName.fromString(callback.returnType)) else null
+        val argumentTypes = callback.arguments.map { imports.add(TypeName.fromString(it)) }
+        val exceptionTypes = if (!rmi) callback.exceptions.map { imports.add(TypeName.fromString(it)) } else null
+        val remoteException = if (rmi) imports.add(remoteExceptionType) else null
+
+        val packageName1 = callback.packageName ?: packageName
+        val className = getQueueCallbackClassName(callback, prefix, suffix)
+
+        val tData = CallbackTData.builder()
+            .packageName(packageName1)
+            .className(className)
+            .importNames(imports.getImports(packageName1))
+            .remote(rmi)
+            .parameterTypes(argumentTypes.map { imports[it] })
+
+        tData.returnType(returnType?.let { imports[it] } ?: "void")
+        exceptionTypes?.let { et -> tData.exceptionTypes(et.map { imports[it] }) }
+        remoteException?.let { tData.exceptionType(imports[it]) }
+
+        generate(
+            engine,
+            fromPackage(if (rmi) apiJavaOutput else testJavaOutput, packageName1, className),
+            MarionetteTemplates.getCallbackTemplate(),
+            tData.build()
+        )
+    }
+
+    private fun getQueueCallbackClassName(callback: QueueCallback, prefix: String, suffix: String): String {
+        return callback.className ?: prefix + CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, callback.name) + suffix
     }
 
     private fun fromPackage(base: File, pack: String, name: String): File {

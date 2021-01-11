@@ -30,7 +30,7 @@ class ImportResolverTests : StringSpec({
     "it should give an import if only one name exists with that unqualified name" {
         val i = ImportResolver()
         val baz = i.add("foo.bar", "Baz")
-        i.getImport(baz) shouldBe "foo.bar"
+        i.getImport(baz) shouldBe "foo.bar.Baz"
     }
 
     "it should not give an import if more than one name exists with that unqualified name" {
@@ -44,7 +44,7 @@ class ImportResolverTests : StringSpec({
     "it should give an import if only one name exists with that unqualified name and the current package is different" {
         val i = ImportResolver()
         val baz = i.add("foo.bar", "Baz")
-        i.getImport(baz, "qux") shouldBe "foo.bar"
+        i.getImport(baz, "qux") shouldBe "foo.bar.Baz"
     }
 
     "it should not give an import if more than one name exists with that unqualified name but the current package is different" {
@@ -78,6 +78,23 @@ class ImportResolverTests : StringSpec({
 
     "it should not list imports in the same package" {
         val i = ImportResolver()
+        i.add("foo.bar", "Baz")
+        i.add("qux.quux", "Quuz")
+        i.getImports("foo.bar") shouldContainExactly listOf("qux.quux.Quuz")
+    }
+
+    "it should not list imports for primitive types" {
+        val i = ImportResolver()
+        i.add("", "void")
+        i.add("", "int")
+        i.add("foo.bar", "Baz")
+        i.getImports() shouldContainExactly listOf("foo.bar.Baz")
+    }
+
+    "it should not list imports for primitive types or ones from the same package" {
+        val i = ImportResolver()
+        i.add("", "void")
+        i.add("", "int")
         i.add("foo.bar", "Baz")
         i.add("qux.quux", "Quuz")
         i.getImports("foo.bar") shouldContainExactly listOf("qux.quux.Quuz")
