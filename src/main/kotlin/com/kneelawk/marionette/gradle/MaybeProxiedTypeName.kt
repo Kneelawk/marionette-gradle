@@ -1,5 +1,6 @@
 package com.kneelawk.marionette.gradle
 
+import com.kneelawk.marionette.rt.mod.CallbackMaybeProxied
 import com.kneelawk.marionette.rt.proxy.template.ImplementationMaybeProxied
 
 data class MaybeProxiedTypeName(
@@ -21,6 +22,10 @@ data class MaybeProxiedTypeName(
             ImplementationMaybeProxiedTypeName.Unproxied(imports.add(unproxied))
         }
     }
+
+    fun toCallback(imports: ImportResolver): CallbackMaybeProxiedTypeName {
+        return CallbackMaybeProxiedTypeName(imports.add(unproxied), implementationType?.let { imports.add(it) })
+    }
 }
 
 sealed class ImplementationMaybeProxiedTypeName {
@@ -36,5 +41,12 @@ sealed class ImplementationMaybeProxiedTypeName {
         override fun toImplememtationMaybeProxied(imports: ImportResolver): ImplementationMaybeProxied {
             return ImplementationMaybeProxied.ofImplementation(imports[interfaceKey], imports[implementationKey])
         }
+    }
+}
+
+data class CallbackMaybeProxiedTypeName(val unproxiedKey: Any, val implementationKey: Any?) {
+    fun toCallbackMaybeProxied(imports: ImportResolver): CallbackMaybeProxied {
+        return implementationKey?.let { CallbackMaybeProxied.ofImplementation(imports[unproxiedKey], imports[it]) }
+            ?: CallbackMaybeProxied.ofUnproxied(imports[unproxiedKey])
     }
 }

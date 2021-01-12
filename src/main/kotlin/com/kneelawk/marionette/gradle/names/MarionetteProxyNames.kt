@@ -70,7 +70,7 @@ open class MarionetteProxyNames {
     var apiServerQueueCallbackSuffix = "Callback"
 
     @get:Input
-    var apiServerQueueCallbackPackage = "com.kneelawk.marionette.gen.api.callback.queue"
+    var apiServerQueueCallbackPackage = "com.kneelawk.marionette.gen.api.server.callback.queue"
 
     @get:Input
     var testServerQueueCallbackPrefix = ""
@@ -79,7 +79,7 @@ open class MarionetteProxyNames {
     var testServerQueueCallbackSuffix = "Callback"
 
     @get:Input
-    var testServerQueueCallbackPackage = "com.kneelawk.marionette.gen.callback.queue"
+    var testServerQueueCallbackPackage = "com.kneelawk.marionette.gen.server.callback.queue"
 
     @get:Input
     var modCommonProxyPrefix = ""
