@@ -2,6 +2,7 @@ package com.kneelawk.marionette.gradle
 
 import com.kneelawk.marionette.gradle.callback.QueueCallback
 import com.kneelawk.marionette.gradle.names.MarionetteNames
+import com.kneelawk.marionette.gradle.proxy.MarionetteProxies
 import com.kneelawk.marionette.gradle.signal.MarionetteSignals
 import groovy.lang.Closure
 import org.gradle.api.Action
@@ -25,6 +26,9 @@ open class MarionetteTestSet @Inject constructor(private val name: String, priva
         objectFactory.domainObjectContainer(QueueCallback::class.java)
     val serverQueues: NamedDomainObjectContainer<QueueCallback> =
         objectFactory.domainObjectContainer(QueueCallback::class.java)
+    var commonProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
+    var clientProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
+    var serverProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
 
     override fun getName(): String {
         return name
@@ -84,5 +88,32 @@ open class MarionetteTestSet @Inject constructor(private val name: String, priva
 
     fun serverQueues(action: Action<NamedDomainObjectContainer<QueueCallback>>) {
         action.execute(serverQueues)
+    }
+
+    fun commonProxies(action: Action<MarionetteProxies>) {
+        action.execute(commonProxies)
+    }
+
+    fun commonProxies(closure: Closure<Any>) {
+        closure.delegate = commonProxies
+        closure.call(commonProxies)
+    }
+
+    fun clientProxies(action: Action<MarionetteProxies>) {
+        action.execute(clientProxies)
+    }
+
+    fun clientProxies(closure: Closure<Any>) {
+        closure.delegate = clientProxies
+        closure.call(clientProxies)
+    }
+
+    fun serverProxies(action: Action<MarionetteProxies>) {
+        action.execute(serverProxies)
+    }
+
+    fun serverProxies(closure: Closure<Any>) {
+        closure.delegate = serverProxies
+        closure.call(serverProxies)
     }
 }

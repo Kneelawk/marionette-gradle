@@ -3,6 +3,8 @@ package com.kneelawk.marionette.gradle
 import com.google.common.base.CaseFormat
 import com.kneelawk.marionette.gradle.callback.QueueCallback
 import com.kneelawk.marionette.gradle.names.MarionetteNames
+import com.kneelawk.marionette.gradle.proxy.MarionetteProxies
+import com.kneelawk.marionette.gradle.proxy.MarionetteProxy
 import com.kneelawk.marionette.gradle.signal.MarionetteSignals
 import com.kneelawk.marionette.rt.callback.template.CallbackTData
 import com.kneelawk.marionette.rt.instance.template.*
@@ -16,6 +18,7 @@ import com.kneelawk.marionette.rt.mod.server.template.MinecraftServerAccessTData
 import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalQueuesTData
 import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.template.MarionetteModPreLaunchTData
+import com.kneelawk.marionette.rt.proxy.template.*
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftAccessQueueCallbackInfo
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftClientAccessTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftServerAccessTData
@@ -83,6 +86,15 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
     var serverQueues: NamedDomainObjectContainer<QueueCallback> =
         objectFactory.domainObjectContainer(QueueCallback::class.java)
 
+    @get:Nested
+    var commonProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
+
+    @get:Nested
+    var clientProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
+
+    @get:Nested
+    var serverProxies: MarionetteProxies = objectFactory.newInstance(MarionetteProxies::class.java)
+
     @TaskAction
     fun run() {
         val engine = VelocityEngine()
@@ -90,6 +102,34 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
 
         val modId = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, testSetName)
         val modName = CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, testSetName)
+
+        val commonProxyMappings = generateProxyMappings(
+            commonProxies,
+            names.proxy.apiCommonProxyPackage,
+            names.proxy.apiCommonProxyPrefix,
+            names.proxy.apiCommonProxySuffix,
+            names.proxy.modCommonProxyPackage,
+            names.proxy.modCommonProxyPrefix,
+            names.proxy.modCommonProxySuffix
+        )
+        val clientProxyMappings = generateProxyMappings(
+            clientProxies,
+            names.proxy.apiClientProxyPackage,
+            names.proxy.apiClientProxyPrefix,
+            names.proxy.apiClientProxySuffix,
+            names.proxy.modClientProxyPackage,
+            names.proxy.modClientProxyPrefix,
+            names.proxy.modClientProxySuffix
+        )
+        val serverProxyMappings = generateProxyMappings(
+            serverProxies,
+            names.proxy.apiServerProxyPackage,
+            names.proxy.apiServerProxyPrefix,
+            names.proxy.apiServerProxySuffix,
+            names.proxy.modServerProxyPackage,
+            names.proxy.modServerProxyPrefix,
+            names.proxy.modServerProxySuffix
+        )
 
         generate(
             engine,
@@ -168,6 +208,35 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
             names.proxy.testServerQueueCallbackSuffix,
             false
         )
+
+        generateProxies(engine, commonProxyMappings, clientProxyMappings, serverProxyMappings)
+    }
+
+    private fun generateProxyMappings(
+        proxies: MarionetteProxies,
+        apiPackage: String,
+        apiPrefix: String,
+        apiSuffix: String,
+        modPackage: String,
+        modPrefix: String,
+        modSuffix: String
+    ): Map<TypeName, MaybeProxiedTypeName> {
+        val mappings = mutableMapOf<TypeName, MaybeProxiedTypeName>()
+
+        for (proxy in proxies.proxies) {
+            val unproxiedType = TypeName.fromString(proxy.proxiedClass)
+            val interfaceType = TypeName(
+                proxy.interfacePackageName ?: apiPackage,
+                proxy.interfaceClassName ?: getProxyClassName(proxy, apiPrefix, apiSuffix)
+            )
+            val implementationType = TypeName(
+                proxy.implementationPackageName ?: modPackage,
+                proxy.implementationClassName ?: getProxyClassName(proxy, modPrefix, modSuffix)
+            )
+            mappings[unproxiedType] = MaybeProxiedTypeName(unproxiedType, interfaceType, implementationType)
+        }
+
+        return mappings
     }
 
     private fun generate(engine: VelocityEngine, output: File, input: InputStream, data: Any) {
@@ -857,6 +926,174 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
 
     private fun getQueueCallbackClassName(callback: QueueCallback, prefix: String, suffix: String): String {
         return callback.className ?: prefix + CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, callback.name) + suffix
+    }
+
+    private fun generateProxies(
+        engine: VelocityEngine,
+        commonProxyMappings: Map<TypeName, MaybeProxiedTypeName>,
+        clientProxyMappings: Map<TypeName, MaybeProxiedTypeName>,
+        serverProxyMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        for (proxy in commonProxies.proxies) {
+            val rmiType = TypeName(
+                proxy.interfacePackageName ?: names.proxy.apiCommonProxyPackage,
+                proxy.interfaceClassName ?: getProxyClassName(
+                    proxy,
+                    names.proxy.apiCommonProxyPrefix,
+                    names.proxy.apiCommonProxySuffix
+                )
+            )
+            generateProxyInterface(engine, proxy, rmiType, commonProxyMappings)
+            generateProxyImplementation(
+                engine,
+                proxy,
+                names.proxy.modCommonProxyPackage,
+                names.proxy.modCommonProxyPrefix,
+                names.proxy.modCommonProxySuffix,
+                rmiType,
+                commonProxyMappings
+            )
+        }
+        for (proxy in clientProxies.proxies) {
+            val rmiType = TypeName(
+                proxy.interfacePackageName ?: names.proxy.apiClientProxyPackage,
+                proxy.interfaceClassName ?: getProxyClassName(
+                    proxy,
+                    names.proxy.apiClientProxyPrefix,
+                    names.proxy.apiClientProxySuffix
+                )
+            )
+            generateProxyInterface(engine, proxy, rmiType, clientProxyMappings)
+            generateProxyImplementation(
+                engine,
+                proxy,
+                names.proxy.modClientProxyPackage,
+                names.proxy.modClientProxyPrefix,
+                names.proxy.modClientProxySuffix,
+                rmiType,
+                clientProxyMappings
+            )
+        }
+        for (proxy in serverProxies.proxies) {
+            val rmiType = TypeName(
+                proxy.interfacePackageName ?: names.proxy.apiServerProxyPackage,
+                proxy.interfaceClassName ?: getProxyClassName(
+                    proxy,
+                    names.proxy.apiServerProxyPrefix,
+                    names.proxy.apiServerProxySuffix
+                )
+            )
+            generateProxyInterface(engine, proxy, rmiType, serverProxyMappings)
+            generateProxyImplementation(
+                engine,
+                proxy,
+                names.proxy.modServerProxyPackage,
+                names.proxy.modServerProxyPrefix,
+                names.proxy.modServerProxySuffix,
+                rmiType,
+                serverProxyMappings
+            )
+        }
+    }
+
+    private fun generateProxyInterface(
+        engine: VelocityEngine,
+        proxy: MarionetteProxy,
+        typeName: TypeName,
+        mappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
+        val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
+        val methods = proxy.methods.map { method ->
+            val returnType = getProxiedTypeName(mappings, TypeName.fromString(method.returnType)).toInterface(imports)
+            val parameters =
+                method.arguments.map { getProxiedTypeName(mappings, TypeName.fromString(it)).toInterface(imports) }
+            val exceptions = method.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+            exceptions.add(remoteException)
+
+            return@map {
+                ProxyInterfaceMethodTData.builder()
+                    .methodName(method.name)
+                    .returnType(imports[returnType])
+                    .parameterTypes(parameters.map { imports[it] })
+                    .exceptionTypes(exceptions.map { imports[it] })
+                    .build()
+            }
+        }
+
+        generate(
+            engine,
+            fromPackage(apiJavaOutput, typeName.packageName, typeName.className),
+            MarionetteTemplates.getProxyInterfaceTemplate(),
+            ProxyInterfaceTData.builder()
+                .packageName(typeName.packageName)
+                .className(typeName.className)
+                .importNames(imports.getImports(typeName.packageName))
+                .methods(methods.map { it() })
+                .build()
+        )
+    }
+
+    private fun generateProxyImplementation(
+        engine: VelocityEngine,
+        proxy: MarionetteProxy,
+        packageName: String,
+        prefix: String,
+        suffix: String,
+        rmiType: TypeName,
+        mappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
+        val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
+        val rmiClass = imports.add(rmiType)
+        val proxiedClass = imports.add(TypeName.fromString(proxy.proxiedClass))
+        val methods = proxy.methods.map { method ->
+            val returnType =
+                getProxiedTypeName(mappings, TypeName.fromString(method.returnType)).toImplementation(imports)
+            val parameters =
+                method.arguments.map { getProxiedTypeName(mappings, TypeName.fromString(it)).toImplementation(imports) }
+            val exceptions = method.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+            exceptions.add(remoteException)
+
+            return@map {
+                ProxyImplementationMethodTData.builder()
+                    .methodName(method.name)
+                    .returnType(returnType.toImplememtationMaybeProxied(imports))
+                    .parameterTypes(parameters.map { it.toImplememtationMaybeProxied(imports) })
+                    .exceptionTypes(exceptions.map { imports[it] })
+                    .build()
+            }
+        }
+
+        val packageName1 = proxy.implementationPackageName ?: packageName
+        val className = proxy.implementationClassName ?: getProxyClassName(proxy, prefix, suffix)
+
+        generate(
+            engine,
+            fromPackage(modJavaOutput, packageName1, className),
+            MarionetteTemplates.getProxyImplementationTemplate(),
+            ProxyImplementationTData.builder()
+                .packageName(packageName1)
+                .className(className)
+                .importNames(imports.getImports(packageName1))
+                .rmiClass(imports[rmiClass])
+                .proxiedClass(imports[proxiedClass])
+                .methods(methods.map { it() })
+                .build()
+        )
+    }
+
+    private fun getProxyClassName(proxy: MarionetteProxy, prefix: String, suffix: String): String {
+        return prefix + TypeName.fromString(proxy.proxiedClass).className.replace('.', '_') + suffix
+    }
+
+    private fun getProxiedTypeName(
+        mappings: Map<TypeName, MaybeProxiedTypeName>,
+        typeName: TypeName
+    ): MaybeProxiedTypeName {
+        return mappings.getOrDefault(typeName, MaybeProxiedTypeName(typeName, null, null))
     }
 
     private fun fromPackage(base: File, pack: String, name: String): File {

@@ -81,6 +81,9 @@ class MarionettePlugin : Plugin<Project> {
             commonQueues = testSet.commonQueues
             clientQueues = testSet.clientQueues
             serverQueues = testSet.serverQueues
+            commonProxies = testSet.commonProxies
+            clientProxies = testSet.clientProxies
+            serverProxies = testSet.serverProxies
         }
     }
 
@@ -174,7 +177,7 @@ class MarionettePlugin : Plugin<Project> {
                 )
             }
 
-            project.task(mapOf("dependsOn" to testTasks), "marionetteTestAll").apply {
+            afterProject.task(mapOf("dependsOn" to testTasks), "marionetteTestAll").apply {
                 description = "Runs all Marionette Minecraft integration tests"
                 group = "verification"
             }
