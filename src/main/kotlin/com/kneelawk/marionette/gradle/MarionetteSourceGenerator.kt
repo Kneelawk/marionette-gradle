@@ -1365,6 +1365,20 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         }
+        val getters = proxy.getters.map { getter ->
+            val type = getProxiedTypeName(mappings, TypeName.fromString(getter.type)).toInterface(imports)
+
+            return@map {
+                PropertyInterfaceTData(getter.name, imports[type])
+            }
+        }
+        val setters = proxy.setters.map { setter ->
+            val type = getProxiedTypeName(mappings, TypeName.fromString(setter.type)).toInterface(imports)
+
+            return@map {
+                PropertyInterfaceTData(setter.name, imports[type])
+            }
+        }
 
         generate(
             engine,
@@ -1376,6 +1390,8 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .importNames(imports.getImports(typeName.packageName))
                 .superClass(superClass?.let { imports[it] })
                 .methods(methods.map { it() })
+                .getters(getters.map { it() })
+                .setters(setters.map { it() })
                 .build()
         )
     }
@@ -1417,6 +1433,20 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         }
+        val getters = proxy.getters.map { getter ->
+            val type = getProxiedTypeName(mappings, TypeName.fromString(getter.type)).toImplementation(imports)
+
+            return@map {
+                PropertyImplementationTData(getter.name, type.toImplememtationMaybeProxied(imports))
+            }
+        }
+        val setters = proxy.setters.map { setter ->
+            val type = getProxiedTypeName(mappings, TypeName.fromString(setter.type)).toImplementation(imports)
+
+            return@map {
+                PropertyImplementationTData(setter.name, type.toImplememtationMaybeProxied(imports))
+            }
+        }
 
         val packageName1 = proxy.implementationPackageName ?: packageName
         val className = proxy.implementationClassName ?: getProxyClassName(proxy, prefix, suffix)
@@ -1433,6 +1463,8 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .rmiClass(imports[rmiClass])
                 .proxiedClass(imports[proxiedClass])
                 .methods(methods.map { it() })
+                .getters(getters.map { it() })
+                .setters(setters.map { it() })
                 .build()
         )
     }
