@@ -14,6 +14,10 @@ open class MarionetteProxy @Inject constructor(private val objectFactory: Object
 
     @get:Input
     @get:Optional
+    var superClass: String? = null
+
+    @get:Input
+    @get:Optional
     var interfaceClassName: String? = null
 
     @get:Input

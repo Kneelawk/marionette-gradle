@@ -1347,6 +1347,8 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
         val remoteException = imports.add(remoteExceptionType)
+        val superClass =
+            proxy.superClass?.let { getProxiedTypeName(mappings, TypeName.fromString(it)).toInterface(imports) }
         val methods = proxy.methods.map { method ->
             val returnType = getProxiedTypeName(mappings, TypeName.fromString(method.returnType)).toInterface(imports)
             val parameters =
@@ -1372,6 +1374,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .packageName(typeName.packageName)
                 .className(typeName.className)
                 .importNames(imports.getImports(typeName.packageName))
+                .superClass(superClass?.let { imports[it] })
                 .methods(methods.map { it() })
                 .build()
         )
@@ -1389,6 +1392,12 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
         val remoteException = imports.add(remoteExceptionType)
+        val superClass = proxy.superClass?.let {
+            imports.add(
+                getProxiedTypeName(mappings, TypeName.fromString(it)).implementationType
+                    ?: throw IllegalArgumentException("Proxy super class $it must be a proxied class")
+            )
+        }
         val rmiClass = imports.add(rmiType)
         val proxiedClass = imports.add(TypeName.fromString(proxy.proxiedClass))
         val methods = proxy.methods.map { method ->
@@ -1420,6 +1429,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .packageName(packageName1)
                 .className(className)
                 .importNames(imports.getImports(packageName1))
+                .superClass(superClass?.let { imports[it] })
                 .rmiClass(imports[rmiClass])
                 .proxiedClass(imports[proxiedClass])
                 .methods(methods.map { it() })
