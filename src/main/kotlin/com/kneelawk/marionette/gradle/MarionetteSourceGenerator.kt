@@ -8,6 +8,7 @@ import com.kneelawk.marionette.gradle.proxy.MarionetteProxy
 import com.kneelawk.marionette.gradle.signal.MarionetteSignals
 import com.kneelawk.marionette.rt.callback.template.CallbackTData
 import com.kneelawk.marionette.rt.instance.template.*
+import com.kneelawk.marionette.rt.mod.MinecraftAccessConstructorTData
 import com.kneelawk.marionette.rt.mod.MinecraftAccessQueueCallbackInfo
 import com.kneelawk.marionette.rt.mod.client.template.ClientGlobalQueuesTData
 import com.kneelawk.marionette.rt.mod.client.template.ClientGlobalSignalsTData
@@ -19,6 +20,7 @@ import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalQueuesTData
 import com.kneelawk.marionette.rt.mod.server.template.ServerGlobalSignalsTData
 import com.kneelawk.marionette.rt.mod.template.MarionetteModPreLaunchTData
 import com.kneelawk.marionette.rt.proxy.template.*
+import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftAccessConstructorTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftAccessQueueCallbackInfo
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftClientAccessTData
 import com.kneelawk.marionette.rt.rmi.template.RMIMinecraftServerAccessTData
@@ -140,19 +142,19 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .build()
         )
 
-        generateRMIClientAccess(engine)
-        generateRMIServerAccess(engine)
+        generateRMIClientAccess(engine, commonProxyMappings, clientProxyMappings)
+        generateRMIServerAccess(engine, commonProxyMappings, serverProxyMappings)
 
-        generateClientInstance(engine)
-        generateServerInstance(engine)
+        generateClientInstance(engine, commonProxyMappings, clientProxyMappings)
+        generateServerInstance(engine, commonProxyMappings, serverProxyMappings)
         generateClientInstanceBuilder(engine)
         generateServerInstanceBuilder(engine)
 
         generateModPreLaunch(engine)
         generateClientPreLaunch(engine)
         generateServerPreLaunch(engine)
-        generateClientAccess(engine)
-        generateServerAccess(engine)
+        generateClientAccess(engine, commonProxyMappings, clientProxyMappings)
+        generateServerAccess(engine, commonProxyMappings, serverProxyMappings)
 
         generateClientGlobalSignals(engine)
         generateServerGlobalSignals(engine)
@@ -207,9 +209,17 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         }
     }
 
-    private fun generateRMIClientAccess(engine: VelocityEngine) {
+    private fun generateRMIClientAccess(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        clientMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
+        // we make lists of suppliers because we need to add all imports before we start resolving them
         val queueCallbacks = mutableListOf<() -> RMIMinecraftAccessQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> RMIMinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
@@ -244,6 +254,50 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        // import resolver specifically for constructor name resolution
+        val constructorNameImports = ImportResolver()
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(clientProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(clientMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(clientMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.proxy.apiClientAccessPackage
         val className = names.proxy.apiClientAccessName
@@ -259,13 +313,21 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(commonSignals.signals.names)
                 .signalNames(clientSignals.signals.names)
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }
 
-    private fun generateRMIServerAccess(engine: VelocityEngine) {
+    private fun generateRMIServerAccess(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        serverMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
         val queueCallbacks = mutableListOf<() -> RMIMinecraftAccessQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> RMIMinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
@@ -300,6 +362,49 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        val constructorNameImports = ImportResolver()
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(serverProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(serverMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(serverMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.proxy.apiServerAccessPackage
         val className = names.proxy.apiServerAccessName
@@ -315,14 +420,22 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(commonSignals.signals.names)
                 .signalNames(serverSignals.signals.names)
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }
 
-    private fun generateClientInstance(engine: VelocityEngine) {
+    private fun generateClientInstance(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        clientMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
         val rmiClass = imports.add(names.proxy.apiClientAccessPackage, names.proxy.apiClientAccessName)
         val queueCallbacks = mutableListOf<() -> InstanceQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> RMIMinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.testCommonQueueCallbackPackage,
@@ -365,6 +478,49 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        val constructorNameImports = ImportResolver()
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(clientProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(clientMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(clientMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.instance.clientInstancePackage
         val className = names.instance.clientInstanceName
@@ -381,14 +537,22 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(commonSignals.signals.names)
                 .signalNames(clientSignals.signals.names)
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }
 
-    private fun generateServerInstance(engine: VelocityEngine) {
+    private fun generateServerInstance(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        serverMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
         val rmiClass = imports.add(names.proxy.apiServerAccessPackage, names.proxy.apiServerAccessName)
         val queueCallbacks = mutableListOf<() -> InstanceQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> RMIMinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.testCommonQueueCallbackPackage,
@@ -431,6 +595,49 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        val constructorNameImports = ImportResolver()
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(serverProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = constructorNameImports.add(TypeName.fromString(proxy.proxiedClass))
+                val toConstruct =
+                    getProxiedTypeName(serverMappings, TypeName.fromString(proxy.proxiedClass)).toInterface(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(serverMappings, TypeName.fromString(it)).toInterface(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    RMIMinecraftAccessConstructorTData.builder()
+                        .constructorName(constructorNameImports[unproxied].replace('.', '_'))
+                        .constructorClass(imports[toConstruct])
+                        .parameters(parameters.map { imports[it] })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.instance.serverInstancePackage
         val className = names.instance.serverInstanceName
@@ -447,6 +654,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(commonSignals.signals.names)
                 .signalNames(serverSignals.signals.names)
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }
@@ -561,12 +769,19 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
         )
     }
 
-    private fun generateClientAccess(engine: VelocityEngine) {
+    private fun generateClientAccess(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        clientMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
         val rmiClass = imports.add(names.proxy.apiClientAccessPackage, names.proxy.apiClientAccessName)
         val signalClass = imports.add(names.utils.clientGlobalSignalsPackage, names.utils.clientGlobalSignalsName)
         val queueClass = imports.add(names.utils.clientGlobalQueuesPackage, names.utils.clientGlobalQueuesName)
         val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> MinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
@@ -601,6 +816,48 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = imports.add(TypeName.fromString(proxy.proxiedClass))
+                val typeName =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toConstructor(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toImplementation(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    MinecraftAccessConstructorTData.builder()
+                        .constructorName(imports[unproxied].replace('.', '_'))
+                        .constructorClass(typeName.toConstructorMaybeProxied(imports))
+                        .parameters(parameters.map { it.toImplememtationMaybeProxied(imports) })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(clientProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = imports.add(TypeName.fromString(proxy.proxiedClass))
+                val typeName =
+                    getProxiedTypeName(clientMappings, TypeName.fromString(proxy.proxiedClass)).toConstructor(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(clientMappings, TypeName.fromString(it)).toImplementation(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    MinecraftAccessConstructorTData.builder()
+                        .constructorName(imports[unproxied].replace('.', '_'))
+                        .constructorClass(typeName.toConstructorMaybeProxied(imports))
+                        .parameters(parameters.map { it.toImplememtationMaybeProxied(imports) })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.proxy.modClientAccessPackage
         val className = names.proxy.modClientAccessName
@@ -619,16 +876,24 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(clientSignals.signals.names)
                 .queueClass(imports[queueClass])
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }
 
-    private fun generateServerAccess(engine: VelocityEngine) {
+    private fun generateServerAccess(
+        engine: VelocityEngine,
+        commonMappings: Map<TypeName, MaybeProxiedTypeName>,
+        serverMappings: Map<TypeName, MaybeProxiedTypeName>
+    ) {
+        val remoteExceptionType = TypeName("java.rmi", "RemoteException")
         val imports = ImportResolver()
+        val remoteException = imports.add(remoteExceptionType)
         val rmiClass = imports.add(names.proxy.apiServerAccessPackage, names.proxy.apiServerAccessName)
         val signalClass = imports.add(names.utils.serverGlobalSignalsPackage, names.utils.serverGlobalSignalsName)
         val queueClass = imports.add(names.utils.serverGlobalQueuesPackage, names.utils.serverGlobalQueuesName)
         val queueCallbacks = mutableListOf<() -> MinecraftAccessQueueCallbackInfo>()
+        val constructors = mutableListOf<() -> MinecraftAccessConstructorTData>()
         queueCallbacks.addAll(commonQueues.map { cb ->
             val clazz = imports.add(
                 cb.packageName ?: names.proxy.apiCommonQueueCallbackPackage,
@@ -663,6 +928,48 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     .build()
             }
         })
+        constructors.addAll(commonProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = imports.add(TypeName.fromString(proxy.proxiedClass))
+                val typeName =
+                    getProxiedTypeName(commonMappings, TypeName.fromString(proxy.proxiedClass)).toConstructor(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(commonMappings, TypeName.fromString(it)).toImplementation(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    MinecraftAccessConstructorTData.builder()
+                        .constructorName(imports[unproxied].replace('.', '_'))
+                        .constructorClass(typeName.toConstructorMaybeProxied(imports))
+                        .parameters(parameters.map { it.toImplememtationMaybeProxied(imports) })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
+        constructors.addAll(serverProxies.proxies.flatMap { proxy ->
+            return@flatMap proxy.constructors.map { ctr ->
+                val unproxied = imports.add(TypeName.fromString(proxy.proxiedClass))
+                val typeName =
+                    getProxiedTypeName(serverMappings, TypeName.fromString(proxy.proxiedClass)).toConstructor(imports)
+                val parameters = ctr.arguments.map {
+                    getProxiedTypeName(serverMappings, TypeName.fromString(it)).toImplementation(imports)
+                }
+                val exceptions = ctr.exceptions.map { imports.add(TypeName.fromString(it)) }.toMutableSet()
+                exceptions.add(remoteException)
+
+                return@map {
+                    MinecraftAccessConstructorTData.builder()
+                        .constructorName(imports[unproxied].replace('.', '_'))
+                        .constructorClass(typeName.toConstructorMaybeProxied(imports))
+                        .parameters(parameters.map { it.toImplememtationMaybeProxied(imports) })
+                        .exceptions(exceptions.map { imports[it] })
+                        .build()
+                }
+            }
+        })
 
         val packageName = names.proxy.modServerAccessPackage
         val className = names.proxy.modServerAccessName
@@ -681,6 +988,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 .signalNames(serverSignals.signals.names)
                 .queueClass(imports[queueClass])
                 .queueCallbacks(queueCallbacks.map { it() })
+                .constructors(constructors.map { it() })
                 .build()
         )
     }

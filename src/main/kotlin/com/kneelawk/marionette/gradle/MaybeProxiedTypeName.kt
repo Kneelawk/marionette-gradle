@@ -1,6 +1,7 @@
 package com.kneelawk.marionette.gradle
 
 import com.kneelawk.marionette.rt.mod.CallbackMaybeProxied
+import com.kneelawk.marionette.rt.mod.ConstructorMaybeProxied
 import com.kneelawk.marionette.rt.proxy.template.ImplementationMaybeProxied
 
 data class MaybeProxiedTypeName(
@@ -26,6 +27,17 @@ data class MaybeProxiedTypeName(
     fun toCallback(imports: ImportResolver): CallbackMaybeProxiedTypeName {
         return CallbackMaybeProxiedTypeName(imports.add(unproxied), implementationType?.let { imports.add(it) })
     }
+
+    fun toConstructor(imports: ImportResolver): ConstructorMaybeProxiedTypeName {
+        if (interfaceType == null || implementationType == null) {
+            throw IllegalStateException("Cannot make a constructor for a non-proxied type")
+        }
+        return ConstructorMaybeProxiedTypeName(
+            imports.add(unproxied),
+            imports.add(interfaceType),
+            imports.add(implementationType)
+        )
+    }
 }
 
 sealed class ImplementationMaybeProxiedTypeName {
@@ -48,5 +60,11 @@ data class CallbackMaybeProxiedTypeName(val unproxiedKey: Any, val implementatio
     fun toCallbackMaybeProxied(imports: ImportResolver): CallbackMaybeProxied {
         return implementationKey?.let { CallbackMaybeProxied.ofImplementation(imports[unproxiedKey], imports[it]) }
             ?: CallbackMaybeProxied.ofUnproxied(imports[unproxiedKey])
+    }
+}
+
+data class ConstructorMaybeProxiedTypeName(val unproxiedKey: Any, val interfaceKey: Any, val implementationKey: Any) {
+    fun toConstructorMaybeProxied(imports: ImportResolver): ConstructorMaybeProxied {
+        return ConstructorMaybeProxied(imports[unproxiedKey], imports[interfaceKey], imports[implementationKey])
     }
 }

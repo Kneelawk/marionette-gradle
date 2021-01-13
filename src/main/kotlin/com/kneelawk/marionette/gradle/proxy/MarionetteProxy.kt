@@ -31,6 +31,9 @@ open class MarionetteProxy @Inject constructor(private val objectFactory: Object
     @get:Nested
     var methods = mutableListOf<MarionetteProxyMethod>()
 
+    @get:Nested
+    var constructors = mutableListOf<MarionetteProxyConstructor>()
+
     fun method(methodName: String) {
         methods.add(objectFactory.newInstance(MarionetteProxyMethod::class.java, methodName))
     }
@@ -46,5 +49,22 @@ open class MarionetteProxy @Inject constructor(private val objectFactory: Object
         closure.delegate = method
         closure.call(method)
         methods.add(method)
+    }
+
+    fun constructor() {
+        constructors.add(objectFactory.newInstance(MarionetteProxyConstructor::class.java))
+    }
+
+    fun constructor(action: Action<MarionetteProxyConstructor>) {
+        val constructor = objectFactory.newInstance(MarionetteProxyConstructor::class.java)
+        action.execute(constructor)
+        constructors.add(constructor)
+    }
+
+    fun constructor(closure: Closure<Any>) {
+        val constructor = objectFactory.newInstance(MarionetteProxyConstructor::class.java)
+        closure.delegate = constructor
+        closure.call(constructor)
+        constructors.add(constructor)
     }
 }
