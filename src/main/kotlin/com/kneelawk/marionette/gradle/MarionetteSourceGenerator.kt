@@ -1297,6 +1297,10 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
             )
         }
         for (proxy in clientProxies.proxies) {
+            val clientMergedMappings = mutableMapOf<TypeName, MaybeProxiedTypeName>().apply {
+                putAll(clientProxyMappings)
+                putAll(commonProxyMappings)
+            }
             val rmiType = TypeName(
                 proxy.interfacePackageName ?: names.proxy.apiClientProxyPackage,
                 proxy.interfaceClassName ?: getProxyClassName(
@@ -1305,7 +1309,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     names.proxy.apiClientProxySuffix
                 )
             )
-            generateProxyInterface(engine, proxy, rmiType, clientProxyMappings)
+            generateProxyInterface(engine, proxy, rmiType, clientMergedMappings)
             generateProxyImplementation(
                 engine,
                 proxy,
@@ -1313,10 +1317,14 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 names.proxy.modClientProxyPrefix,
                 names.proxy.modClientProxySuffix,
                 rmiType,
-                clientProxyMappings
+                clientMergedMappings
             )
         }
         for (proxy in serverProxies.proxies) {
+            val serverMergedMappings = mutableMapOf<TypeName, MaybeProxiedTypeName>().apply {
+                putAll(serverProxyMappings)
+                putAll(commonProxyMappings)
+            }
             val rmiType = TypeName(
                 proxy.interfacePackageName ?: names.proxy.apiServerProxyPackage,
                 proxy.interfaceClassName ?: getProxyClassName(
@@ -1325,7 +1333,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                     names.proxy.apiServerProxySuffix
                 )
             )
-            generateProxyInterface(engine, proxy, rmiType, serverProxyMappings)
+            generateProxyInterface(engine, proxy, rmiType, serverMergedMappings)
             generateProxyImplementation(
                 engine,
                 proxy,
@@ -1333,7 +1341,7 @@ open class MarionetteSourceGenerator @Inject constructor(private val objectFacto
                 names.proxy.modServerProxyPrefix,
                 names.proxy.modServerProxySuffix,
                 rmiType,
-                serverProxyMappings
+                serverMergedMappings
             )
         }
     }
