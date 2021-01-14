@@ -77,7 +77,7 @@ class ImportResolver {
     fun getImports(): List<String> {
         val builder = ImmutableList.builder<String>()
         for (type in existingTypes.keys) {
-            if (existingNames[type.className]!! < 2 && type.wrapper == null) {
+            if (existingNames[type.className]!! < 2 && type.packageName.isNotEmpty() && type.packageName != "java.lang") {
                 builder.add(type.qualified)
             }
         }
@@ -87,7 +87,7 @@ class ImportResolver {
     fun getImports(curPack: String): List<String> {
         val builder = ImmutableList.builder<String>()
         for (type in existingTypes.keys) {
-            if (existingNames[type.className]!! < 2 && curPack != type.packageName && type.wrapper == null) {
+            if (existingNames[type.className]!! < 2 && curPack != type.packageName && type.packageName.isNotEmpty() && type.packageName != "java.lang") {
                 builder.add(type.qualified)
             }
         }
